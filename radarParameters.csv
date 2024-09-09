@@ -1,0 +1,5 @@
+Field,TOA,AOA,peakAmp,Freq,PRI,PW,scanMode,scanPeriod,Beamwidth
+radar1,1e-6,45,-20,9.47e9,100e-6,1100e-9,Circular,1.45,2.5
+radar2,11.5e-6,86,-15,11.9e9,10e-6,750e-9,Sector,1.07,1
+radar3,1.5e-6,87,-33,9.42e9,130e-6,3000e-9,Circular,2,4
+radar4,75e-3,50,-30,9.35e9,9e-6,500e-9,Lock,NaN,NaN
