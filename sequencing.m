@@ -1,9 +1,5 @@
-% function sequencing(PDWs,PRICandidates,radarParams,outputFileName)
-    PDWs = PDWImport;
-    % PRICandidates = delta_toa.Levels.PRI;
-    radarParams = radarParameters;
-    outputFileName = 'testSequencing.txt';
-    
+function sequencing(PDWs,delta_toa,radarParams,outputFileName)
+   
     % Extract PRI values from PRICandidates structure
     pri_values = cell(numel(delta_toa),4);
     for i = 1:numel(delta_toa)
@@ -32,6 +28,12 @@
     pri_candidates = zeros(num_levels, 3);
     % pri_selected_candidates = zeros(4,1);
     
+    % Sort PDWImport by TOA for sequential processing
+    [~, idx] = sort([PDWs.TOA]);
+    PDWs = PDWs(idx); % Sort PDWImport by TOA
+
+    % pulses_to_remove = [];
+
     % Loop through each cluster
     for cluster_idx = 1:num_cluster
         % Loop through each level
@@ -56,7 +58,7 @@
         pri_selected_candidates = [pri_selected_candidates,pri_candidate];
         pri_candidates = zeros(num_levels, 3);
 
-        % Go through merged list (PDWImport) and start at first TOA. Look at a PRI
+        % Go through merged list (PDWs) and start at first TOA. Look at a PRI
         % candidate away and see if a pulse exists. If it does, add to
         % seuqenced list, then go forward until no pulse exists (do 5
         % more to mitigate pulse loss and uncertainty).
@@ -67,23 +69,22 @@
         % Initialize sequenced pulses list
         sequenced_pulses = struct([]);
         
-        % Sort PDWImport by TOA for sequential processing
-        [~, idx] = sort([PDWs.TOA]);
-        PDWs = PDWs(idx); % Sort PDWImport by TOA
-        
         % Initialize a flag for when to stop within the scan
         scan_start_TOA = PDWs(1).TOA;
+
+        % Keep track of pulses to remove
+        pulses_to_remove = [];
         
         % Process only pulses within the single scan (scanPeriod)
-        pdw_idx = 1; % Index for PDWImport
-        while pdw_idx <= length(PDWs) && PDWs(pdw_idx).TOA < scan_start_TOA + radarParams.radar1.scanPeriod
-            % Start from the first pulse (TOA) in PDWImport
+        pdw_idx = 1; % Index for PDWs
+        while pdw_idx <= length(PDWs) && PDWs(pdw_idx).TOA < scan_start_TOA + radarParams.radar3.scanPeriod
+            % Start from the first pulse (TOA) in PDWs
             first_TOA = PDWs(pdw_idx).TOA;
             
             % Initialize a temporary list to hold the current sequence of pulses
             current_sequence = PDWs(pdw_idx); % Start with the first pulse
             
-            % Move to the next PDW in PDWImport (removing it after processing)
+            % Move to the next PDW in PDWs
             pdw_idx = pdw_idx + 1;
             
             % Loop over each PRI candidate
@@ -95,7 +96,7 @@
                 missing_pulses_count = 0;
                 pulse_found = true;
                 sequence_length = 1; % Start with one pulse in the sequence
-                max_missing_pulses = 5;
+                max_missing_pulses = 5; % Set the maximum number of missing pulses allowed
                 tolerance = PDWParameters.TOA.resolution;
                 while pulse_found && missing_pulses_count <= max_missing_pulses
                     % Calculate expected TOA based on PRI and current sequence length
@@ -103,14 +104,16 @@
                     
                     % Find the pulse that matches the expected TOA within a
                     % tolerance of uncertainty
-                    next_pulse_idx = find(abs([PDWs.TOA] - expected_TOA) < tolerance);
+                    TOA_diffs = abs([PDWs.TOA] - expected_TOA);
+                    next_pulse_idx = find(TOA_diffs < tolerance, 1);
+                    % next_pulse_idx = find(abs([PDWs.TOA] - expected_TOA) < tolerance,1);
                     
                     if ~isempty(next_pulse_idx)
                         % Add the found pulse to the sequence
                         current_sequence(end+1) = PDWs(next_pulse_idx);
                         
-                        % Remove the found pulse from PDWs
-                        PDWs(next_pulse_idx) = [];
+                        % Mark the found pulse to remove
+                        pulses_to_remove(end+1) = next_pulse_idx;
                         
                         % Reset missing pulses count and increment sequence length
                         missing_pulses_count = 0;
@@ -118,6 +121,10 @@
                     else
                         % If no pulse found, increment missing pulses count
                         missing_pulses_count = missing_pulses_count + 1;
+                        % Exit if no pulses found
+                        if missing_pulses_count > max_missing_pulses
+                            pulse_found = false;
+                        end
                         
                     end
                 end
@@ -129,25 +136,17 @@
             end
             
             % Break the loop if the TOA exceeds the current scan window
-            if expected_TOA > scan_start_TOA + radarParams.radar1.scanPeriod
+            if expected_TOA > scan_start_TOA + radarParams.radar3.scanPeriod
                 break;
             end
         end
+        % Remove pulses
+        PDWs(pulses_to_remove) = [];
 
-
-        % valid_PDWs = [];
-        % current_time = radarParams.radar1.TOA;
-        % end_time = radarParams.radar1.TOA + radarParams.radar1.scanPeriod;
-        % while current_time <= end_time
-        %     for i = 1:length(PDWs)
-        %         if PDWs(i).TOA >= current_time && PDWs(i).TOA < (current_time + pri_candidates)
-        %             valid_PDWs = [valid_PDWs;PDWs(i)];
-        %         end
-        %     end
-        %     current_time = current_time + pri_candidates;
-        % end
+        % Reset
+        pulses_to_remove = [];
     end
     
 
 
-% end
+end
